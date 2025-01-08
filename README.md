@@ -56,4 +56,94 @@ Dáta zo zdrojového datasetu (formát `.csv`) boli najprv nahraté do Snowflake
 ```sql
 CREATE OR REPLACE STAGE my_stage;
 ```
+Do stage boli následne nahraté súbory obsahujúce údaje o používateľoch, filmoch, hodnoteniach, žánroch a iných entitách. Dáta boli importované do staging tabuliek pomocou príkazu COPY INTO. Pre každú tabuľku sa použil podobný príkaz:
 
+```sql
+COPY INTO users_staging
+FROM @my_stage/users.csv
+FILE_FORMAT = (TYPE = 'CSV' FIELD_OPTIONALLY_ENCLOSED_BY = '"' SKIP_HEADER = 1);
+```
+
+V prípade nekonzistentných záznamov bol použitý parameter ON_ERROR = 'CONTINUE', ktorý zabezpečil pokračovanie procesu bez prerušenia pri chybách.
+
+---
+### **3.2 Transfor (Transformácia dát)**
+Transformácia dát bola kľúčovou fázou, v ktorej sa staging dáta vyčistili, obohatili a transformovali do štruktúry vhodnej pre viacdimenzionálny model. Tento model je typu "hviezda" a pozostáva z faktovej tabuľky a dimenzií.
+**Dimenzia `dim_users`**
+Tabuľka  `dim_users` obsahuje údaje o používateľoch, ako sú veková skupina, pohlavie a povolanie. Na základe veku boli používateľom priradené kategórie:
+```sql
+CREATE TABLE dim_users AS
+SELECT DISTINCT
+    u.id AS dim_userId,
+    CASE 
+        WHEN u.age < 18 THEN 'Under 18'
+        WHEN u.age BETWEEN 18 AND 24 THEN '18-24'
+        WHEN u.age BETWEEN 25 AND 34 THEN '25-34'
+        WHEN u.age BETWEEN 35 AND 44 THEN '35-44'
+        WHEN u.age BETWEEN 45 AND 54 THEN '45-54'
+        WHEN u.age >= 55 THEN '55+'
+        ELSE 'Unknown'
+    END AS age_group,
+    u.gender AS gender,
+    o.name AS occupation_name
+FROM users_staging u
+JOIN occupations_staging o ON u.occupation_id = o.id; 
+```
+**Dimenzia `dim_users`**
+Tabuľka  `dim_movies` obsahuje informácie o filmoch, vrátane názvu a roku vydania:
+```sql
+CREATE TABLE dim_movies AS
+SELECT DISTINCT
+    m.id AS dim_movieId, 
+    m.title AS title,
+    m.release_year AS release_year
+FROM movies_staging m;
+```
+**Dimenzia `dim_genres`**
+Tabuľka  `dim_genres` obsahuje informácie o filmoch, vrátane názvu a roku vydania:
+```sql
+CREATE TABLE dim_genres AS
+SELECT DISTINCT
+    g.id AS dim_genreId, 
+    g.name AS genre_name
+FROM genres_staging g;
+```
+**Dimenzia `dim_date`**
+Tabuľka  `dim_date` je navrhnutá tak, aby umožňovala podrobnú časovú analýzu. Obsahuje informácie o dátumoch hodnotení, vrátane dňa, mesiaca, roku a týždňa:
+```sql
+CREATE TABLE dim_date AS
+SELECT DISTINCT
+    DATE(r.rated_at) AS dim_date,
+    EXTRACT(YEAR FROM r.rated_at) AS year,
+    EXTRACT(MONTH FROM r.rated_at) AS month,
+    EXTRACT(DAY FROM r.rated_at) AS day,
+    EXTRACT(DOW FROM r.rated_at) AS day_of_week,
+    EXTRACT(WEEK FROM r.rated_at) AS week
+FROM ratings_staging r;
+```
+**Dimenzia `dim_time`**
+Dimenzia `dim_time` obsahuje detailné časové údaje, ako sú hodiny, minúty a sekundy:
+```sql
+CREATE TABLE dim_time AS
+SELECT DISTINCT
+    EXTRACT(HOUR FROM r.rated_at) AS hour,
+    EXTRACT(MINUTE FROM r.rated_at) AS minute,
+    EXTRACT(SECOND FROM r.rated_at) AS second
+FROM ratings_staging r;
+```
+**Faktová tabuľka `fact_ratings`**
+Tabuľka  `fact_ratings` obsahuje záznamy o hodnoteniach používateľov, prepojenia na všetky dimenzie a kľúčové metriky, ako je hodnota hodnotenia:
+```sql
+CREATE TABLE fact_ratings AS
+SELECT
+    r.id AS fact_rating_id, 
+    r.user_id AS user_id,
+    r.movie_id AS movie_id,
+    gm.genre_id AS genre_id,  
+    DATE(r.rated_at) AS date_id,
+    EXTRACT(HOUR FROM r.rated_at) AS time_id,
+    r.rating AS rating_value
+FROM ratings_staging r
+JOIN genres_movies_staging gm ON r.movie_id = gm.movie_id;
+```
+### **3.3 Load (Načítanie dát)**
