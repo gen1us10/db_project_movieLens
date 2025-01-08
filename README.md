@@ -156,6 +156,83 @@ DROP TABLE IF EXISTS genres_staging;
 DROP TABLE IF EXISTS ratings_staging;
 DROP TABLE IF EXISTS occupations_staging;
 ```
-ETL proces v Snowflake umožnil transformáciu pôvodných dát zo .csv formátu do viacdimenzionálneho modelu typu hviezda. Tento model podporuje analýzu používateľských preferencií a hodnotení filmov, pričom poskytuje základ pre vizualizácie a reporty.
+ETL proces v Snowflake umožnil transformáciu pôvodných dát zo .csv formátu do viacdimenzionálneho modelu typu hviezda. Tento model podporuje analýzu používateľských preferencií a hodnotení filmov, pričom 
+poskytuje základ pre vizualizácie a reporty.
+
 ---
 ### **4 Vizualizácia dát**
+
+Dashboard obsahuje `5 vizualizácií`, ktoré poskytujú základný prehľad o kľúčových metrikách a trendoch týkajúcich sa filmov, používateľov a hodnotení. Tieto vizualizácie odpovedajú na dôležité otázky a umožňujú lepšie pochopiť správanie používateľov a ich preferencie.
+
+<p align="center">
+  <img src="https://github.com/gen1us10/db_project_movieLens/blob/main/movielens_dashboard.png" alt="ERD Schema">
+  <br>
+  <em>Obrázok 3 Dashboard MovieLens datasetu</em>
+</p>
+
+---
+### **Graf 1: Filmy s najvyšším priemerným hodnotením a počtom hodnotení (Top 30)**
+Táto vizualizácia zobrazuje 30 filmov s najvyšším priemerným hodnotením a počtom hodnotení. Poskytuje prehľad o najkvalitnejších a najobľúbenejších filmoch podľa používateľských recenzií. Tieto informácie môžu byť využité na odporúčanie filmov pre konkrétne cieľové skupiny.
+```sql
+SELECT 
+    dim_movies.title,
+    AVG(fact_ratings.rating_value) AS avg_rating,
+    COUNT(fact_ratings.rating_value) AS total_ratings
+FROM fact_ratings
+JOIN dim_movies ON fact_ratings.movie_id = dim_movies.dim_movieId
+GROUP BY dim_movies.title
+ORDER BY avg_rating DESC, total_ratings DESC
+LIMIT 30;
+```
+---
+### **Graf 2: Priemerné skóre podľa vekovej skupiny**
+Graf znázorňuje, ako sa priemerné hodnotenie filmov líši podľa vekových skupín používateľov. Tieto údaje pomáhajú lepšie pochopiť preferencie rôznych vekových kategórií a prispôsobiť obsah podľa ich preferencií.
+
+```sql
+SELECT u.age_group, AVG(r.rating_value) AS avg_rating
+FROM fact_ratings r
+JOIN dim_users u ON r.user_id = u.dim_userId
+GROUP BY u.age_group
+ORDER BY avg_rating DESC;
+```
+---
+### **Graf 3: Popularita filmov podľa roku vydania**
+Vizualizácia ukazuje počet hodnotení filmov podľa roku ich vydania. Pomáha identifikovať obdobia s najväčšou produkciou populárnych filmov a trendy v čase.
+
+```sql
+SELECT m.release_year, COUNT(r.fact_rating_id) AS num_ratings
+FROM fact_ratings r
+JOIN dim_movies m ON r.movie_id = m.dim_movieId
+GROUP BY m.release_year
+ORDER BY num_ratings DESC;
+```
+---
+### **Graf 4: Najobľúbenejšie značky podľa žánru**
+Táto vizualizácia zobrazuje najčastejšie používané značky (tagy) pri filmoch v jednotlivých žánroch. Pomáha pochopiť, aké témy alebo charakteristiky sú pre používateľov dôležité pri hodnotení filmov.
+
+```sql
+SELECT t.tags, g.genre_name, COUNT(t.id) AS num_tags
+FROM tags_staging t
+JOIN genres_movies_staging gm ON t.movie_id = gm.movie_id
+JOIN dim_genres g ON gm.genre_id = g.dim_genreId
+GROUP BY t.tags, g.genre_name
+ORDER BY num_tags DESC;
+```
+---
+### **Graf 5: Preferencie žánrov podľa pohlavia**
+Graf ukazuje, aké filmové žánre preferujú muži a ženy. Tieto informácie môžu byť využité na personalizované odporúčania filmov podľa pohlavia.
+
+```sql
+SELECT u.gender, g.genre_name, COUNT(r.fact_rating_id) AS num_ratings
+FROM fact_ratings r
+JOIN dim_users u ON r.user_id = u.dim_userId
+JOIN dim_genres g ON r.genre_id = g.dim_genreId
+GROUP BY u.gender, g.genre_name
+ORDER BY u.gender, num_ratings DESC;
+```
+
+Dashboard poskytuje komplexný pohľad na dáta, pričom zodpovedá dôležité otázky týkajúce sa preferencií a správania používateľov. Vizualizácie umožňujú jednoduchú interpretáciu dát a môžu byť využité na optimalizáciu odporúčacích systémov, marketingových stratégií a filmových kampaní.
+
+---
+
+**Autor:** Nikita Martynenko
