@@ -146,4 +146,16 @@ SELECT
 FROM ratings_staging r
 JOIN genres_movies_staging gm ON r.movie_id = gm.movie_id;
 ```
+---
 ### **3.3 Load (Načítanie dát)**
+Po úspešnom vytvorení dimenzií a faktovej tabuľky boli staging tabuľky odstránené, aby sa optimalizovalo využitie úložiska:
+```sql
+DROP TABLE IF EXISTS users_staging;
+DROP TABLE IF EXISTS movies_staging;
+DROP TABLE IF EXISTS genres_staging;
+DROP TABLE IF EXISTS ratings_staging;
+DROP TABLE IF EXISTS occupations_staging;
+```
+ETL proces v Snowflake umožnil transformáciu pôvodných dát zo .csv formátu do viacdimenzionálneho modelu typu hviezda. Tento model podporuje analýzu používateľských preferencií a hodnotení filmov, pričom poskytuje základ pre vizualizácie a reporty.
+---
+### **4 Vizualizácia dát**
